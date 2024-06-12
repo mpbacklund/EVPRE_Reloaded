@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, useContext } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -6,6 +6,9 @@ import ReactFlow, {
   useEdgesState,
   Controls,
   Background,
+  getIncomers,
+  getOutgoers,
+  getConnectedEdges,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Button } from 'react-bootstrap'
@@ -20,7 +23,6 @@ import RightSideBar from '../components/rightSidebar';
 import CarNode from '../components/CarNode'
 import AddressNode from '../components/AddressNode';
 import RouteNode from '../components/RouteNode';
-
 
 const initialNodes = [
   {
@@ -102,7 +104,6 @@ const DnDFlow = () => {
 
       const type = event.dataTransfer.getData('application/reactflow');
 
-      // check if the dropped element is valid
       if (typeof type === 'undefined' || !type) {
         return;
       }
@@ -122,6 +123,47 @@ const DnDFlow = () => {
     },
     [reactFlowInstance],
   );
+
+  const onNodesDelete = useCallback(
+    (deleted) => {
+      setEdges(
+        deleted.reduce((acc, node) => {
+          const incomers = getIncomers(node, nodes, edges);
+          const outgoers = getOutgoers(node, nodes, edges);
+          const connectedEdges = getConnectedEdges([node], edges);
+
+          const remainingEdges = acc.filter((edge) => !connectedEdges.includes(edge));
+
+          const createdEdges = incomers.flatMap(({ id: source }) =>
+            outgoers.map(({ id: target }) => ({ id: `${source}->${target}`, source, target }))
+          );
+
+          return [...remainingEdges, ...createdEdges];
+        }, edges)
+      );
+    },
+    [nodes, edges]
+  );
+
+  const handleKeyDown = useCallback(
+    (event) => {
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        const selectedNodes = reactFlowInstance.getNodes().filter(node => node.selected);
+        if (selectedNodes.length > 0) {
+          onNodesDelete(selectedNodes);
+          setNodes((nds) => nds.filter((node) => !node.selected));
+        }
+      }
+    },
+    [reactFlowInstance, onNodesDelete, setNodes]
+  );
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
 
   const proOptions = { hideAttribution: true };
   
@@ -200,6 +242,7 @@ const DnDFlow = () => {
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onNodesDelete={onNodesDelete}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
             onInit={setReactFlowInstance}

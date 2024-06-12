@@ -9,14 +9,6 @@ from django.shortcuts import get_object_or_404
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
-from dotenv import load_dotenv
-
-
-@api_view(['GET'])
-def logged_in(request):
-    data = {'logged_in':'True', 'username':'Matt'}
-    return Response(data)
-
 @api_view(['POST'])
 def login(request):
     user = get_object_or_404(User, email=request.data['email'])
