@@ -79,6 +79,7 @@ const DnDFlow = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
+  const [fetchingRoute, setFetchingRoute] = useState(false);
 
   const { nodeValues, setImageURL } = useNodeStore((state) => ({
     nodeValues: state.nodes,
@@ -86,7 +87,6 @@ const DnDFlow = () => {
   }));
 
   const { data, loading, error, refetch} = useFetch();
-  let fetchingRoute = false;
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
@@ -168,6 +168,7 @@ const DnDFlow = () => {
   const proOptions = { hideAttribution: true };
   
   const submit = async () => {
+    setFetchingRoute(true);
     const routeNodes = nodes.filter(node => node.type === 'routeNode');
     if (routeNodes.length !== 1) {
       return false;
@@ -190,7 +191,6 @@ const DnDFlow = () => {
 
     if (connectedAddressNodes.length === 2 && connectedCarNodes.length == 1) {
       try {
-        fetchingRoute = true;
         const startLocation = await getLatLon(nodeValues[connectedAddressNodes[0].id])
         const endLocation = await getLatLon(nodeValues[connectedAddressNodes[1].id])
         console.log(startLocation);
@@ -206,16 +206,14 @@ const DnDFlow = () => {
         console.log(params)
 
         const route = await axios.get('http://localhost:8000/getRoute', {params: params});
-        
-        fetchingRoute = false;
       } catch (error) {
         console.error('Error fetching image:', error);
       }
     }
     else {
       console.log("failed")
-      fetchingRoute = false;
     }
+    setFetchingRoute(false);
   }
 
   const getLatLon = async (address) => {

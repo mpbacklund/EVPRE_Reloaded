@@ -9,6 +9,10 @@ from django.shortcuts import get_object_or_404
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
+import sys
+sys.path.append("EVPRE")
+
+
 @api_view(['POST'])
 def login(request):
     user = get_object_or_404(User, email=request.data['email'])
@@ -61,4 +65,10 @@ def getRoute(request):
 
     #route_estimator_length = RouteEstimator(startCoord, endCoord, vehicle)
     #print(route_estimator_length)
+
+    # route_estimator_length = RouteEstimator(Config())
+    # route_map = route_estimator_length.create_map()
+    #
+
     return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
+
