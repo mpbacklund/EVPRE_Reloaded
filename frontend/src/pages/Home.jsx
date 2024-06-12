@@ -24,10 +24,10 @@ const Home = () => {
     }
 
     return (
-        <div class="hasNavBar">
+        <div className="hasNavBar">
             <NavBar />
 
-            <Container classname="md">
+            <Container className="md">
             <Card className='mb-3'>
                 <Card.Img/>
                 <Card.Body>

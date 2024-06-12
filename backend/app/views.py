@@ -9,13 +9,10 @@ from django.shortcuts import get_object_or_404
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
+import os
 from dotenv import load_dotenv
 
-
-@api_view(['GET'])
-def logged_in(request):
-    data = {'logged_in':'True', 'username':'Matt'}
-    return Response(data)
+from .EVPRE.route_estimator import RouteEstimator
 
 @api_view(['POST'])
 def login(request):
@@ -56,17 +53,49 @@ def logout(request):
     except Exception as e:
         return Response({"detail": "Unable to log out."}, status=status.HTTP_400_BAD_REQUEST)
 
-@api_view(['GET']) 
+@api_view(['GET'])
 def getRoute(request):
-    startLat = request.GET['startLat']
-    startLon = request.GET['startLon']
-    endLat = request.GET['endLat']
-    endLon = request.GET['endLon']
+    startLat = float(request.GET['startLat'])
+    startLon = float(request.GET['startLon'])
+    endLat = float(request.GET['endLat'])
+    endLon = float(request.GET['endLon'])
     vehicle = request.GET['vehicle']
 
-    startCoord = f"{startLat},{startLon}"
-    endCoord = f"{endLat},{endLon}"
+    startCoord = (startLat, startLon)
+    endCoord = (endLat, endLon)
 
-    #route_estimator_length = RouteEstimator(startCoord, endCoord, vehicle)
-    #print(route_estimator_length)
-    return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
+    print(startCoord)
+    print(endCoord)
+
+    route_estimator_length = RouteEstimator(startCoord, endCoord, vehicle)
+    route_map = route_estimator_length.create_map()
+
+    route_estimator_fastsim_model = RouteEstimator(startCoord, endCoord, vehicle, graph=route_estimator_length.get_graph())
+    route_estimator_fastsim_model.activate_energy_model()
+
+    route_estimator_fastsim_model.set_starting_coord(startLat, startLon)
+    route_estimator_fastsim_model.set_ending_coord(endLat, endLon)
+
+    path_gdf = route_estimator_fastsim_model.handle_change_location(route_estimator_fastsim_model.from_marker.location, route_estimator_fastsim_model.to_marker.location)
+
+    # Convert GeoDataFrame to WKT
+    line_wkt = path_gdf.geometry.iloc[0].wkt
+
+    # Parse WKT to get coordinates
+    parsed = line_wkt.strip('LINESTRING (').strip(')').split(',')
+    route = []
+    for i in range(len(parsed)):
+        item = parsed[i].strip().split(" ")
+        pair = f"{item[1]},{item[0]}"
+        route.append(pair)
+    path = "%7C".join(route)
+
+    url = "https://maps.googleapis.com/maps/api/staticmap?"
+    size = "500x400"
+    start = route[0]
+    end = route[-1]
+    load_dotenv()
+    maps_api = os.getenv("GOOGLE_MAPS_KEY")
+    url += f"path={path}&markers={start}%7C{end}&size={size}&key={maps_api}"
+
+    return Response(url, status=status.HTTP_200_OK)
