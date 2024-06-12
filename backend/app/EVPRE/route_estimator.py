@@ -1,0 +1,281 @@
+import networkx as nx
+import osmnx as ox
+import geopandas as gpd
+import numpy as np
+from ipyleaflet import *
+from shapely.geometry import LineString, mapping
+from simple_energy_model import ev_energy_model
+from vehicles import getVehicleInfo
+from weather import get_weather_data
+from dotenv import load_dotenv
+import os
+
+
+# In order to Set The Lat/Long for both markers there are two functions
+# set_starting_coord(lat, long)
+# set_ending_coord(lat, long)
+
+class RouteEstimator:
+    # stardCoord: a coordinate in the form latitude,longitude (ex: 42.123423,-111.123153)
+    # endCoord: a coordinate in the form latitude,longitude (ex: 42.123423,-111.123153)
+    def __init__(self, startCoord, endCoord, vehicle, graph=None):
+        self.starting_coord = startCoord
+        self.ending_coord = endCoord
+
+
+        load_dotenv()
+        self.weather_key = os.getenv("WEATHER_KEY")
+        self.google_maps_key = os.getenv("GOOGLE_MAPS_KEY")
+        self.traffic_key = os.getenv("TRAFFIC_KEY")
+        self.distance = 20000 # a magic number that comes from the config file in the original fastsim
+        self.edge_weight = "length"
+        # used for map compare mode where three lines are drawn
+        self.compare_mode = False
+        # added
+        self.routeLayer = 5
+
+        # create an instance of the graph
+        if (graph == None):
+            self.create_graph()
+        else:
+            self.graph = graph
+            self.nodes, self.edges = ox.graph_to_gdfs(self.graph)
+
+        # create path layer list
+        self.path_layer_list = []
+
+        vehicleInfo = getVehicleInfo(vehicle)
+
+        # default simple energy model vehicle
+        self.vehicle = ev_energy_model(
+            vehicleInfo['mass'], vehicleInfo['air_resistance'], vehicleInfo['area'])
+
+        # create map markers (moved from create_map for classwide access)
+        # create the TO marker style
+        to_marker_style = AwesomeIcon(
+            name='circle', icon_color='white', marker_color='red', spin=False)
+        self.from_marker = Marker(location=self.starting_coord)
+        self.to_marker = Marker(location=self.ending_coord, icon=to_marker_style)
+
+        # create the map from ipyleaflet
+        self.m = Map(center=self.starting_coord,
+                     basemap=basemaps.CartoDB.Positron, zoom=1)
+
+    def create_map(self):
+
+        to_marker = self.to_marker
+        from_marker = self.from_marker
+        # Original Code
+        # from_marker = Marker(location=self.starting_coord)
+        # to_marker = Marker(location=self.starting_coord, icon=to_marker_style)
+
+        from_marker.observe(lambda event: self.handle_change_location(event, to_marker), 'location')
+        to_marker.observe(lambda event: self.handle_change_location(event, from_marker), 'location')
+        self.m.add_layer(from_marker)
+        self.m.add_layer(to_marker)
+        self.set_nearest_node(from_marker)
+        self.set_nearest_node(to_marker)
+        return self.m
+
+    def create_graph(self):
+        graph = ox.graph_from_point(
+            self.starting_coord, self.distance, network_type="drive")
+        graph = ox.add_edge_speeds(graph)
+        graph = ox.add_edge_bearings(graph)
+        graph = ox.add_edge_travel_times(graph)
+        graph = ox.add_node_elevations_google(graph, self.google_maps_key)
+        graph = ox.add_edge_grades(graph)
+        self.graph = graph
+        # save a dataframe version of edges and nodes for event handler
+        self.nodes, self.edges = ox.graph_to_gdfs(self.graph)
+
+    def get_graph(self):
+        try:
+            return self.graph
+        except:
+            print("Graph has not been created")
+
+    def get_dataframe_from_graph(self):
+        try:
+            return ox.graph_to_gdfs(self.graph)
+        except:
+            print("Graph has not been created")
+
+    ####################################################################################################
+
+    def handle_change_location(self, start_location, end_location):
+            start_node = ox.nearest_nodes(self.graph, start_location[0], start_location[1])  # Location 1
+            end_node = ox.nearest_nodes(self.graph, end_location[0], end_location[1])  # Location 2
+
+            shortest_path = nx.bellman_ford_path(
+                self.graph, start_node, end_node, weight=self.edge_weight)
+
+            shortest_path_points = self.nodes.loc[shortest_path]
+
+            # this does not work. We cannot be writing user files to the backend. 
+            path = gpd.GeoDataFrame(
+                [LineString(shortest_path_points.geometry.values)], columns=['geometry'])
+            path.to_csv('route.csv', index=False)
+            # path.to_file('route.geojson', driver='GeoJSON')
+
+
+            # Save Route Data to file #   May still be useful so I keep
+            # file = open('routeCSV.csv', "w")
+            # for i in range(shortest_path_points.geometry.values.size):
+            # print(shortest_path_points.geometry.values[i], file = file)
+            # file.close()
+
+            # self.m.add_layer(path_layer)
+            # self.routeLayer = path_layer
+            # self.path_layer_list.append(path_layer)
+
+    #####################################################################################################
+
+    def handle_compare_mode(self, event_marker, nearest_marker):
+
+        if len(self.path_layer_list) == 3:
+            self.m.remove_layer(self.path_layer_list[0])
+            self.m.remove_layer(self.path_layer_list[1])
+            self.m.remove_layer(self.path_layer_list[2])
+            self.path_layer_list.pop()
+            self.path_layer_list.pop()
+            self.path_layer_list.pop()
+
+        shortest_path_length = nx.bellman_ford_path(
+            self.graph, event_marker, nearest_marker, weight='length')
+        shortest_path_simple_e = nx.bellman_ford_path(
+            self.graph, event_marker, nearest_marker, weight='simple_model_e')
+        shortest_path_fastsim = nx.bellman_ford_path(
+            self.graph, event_marker, nearest_marker, weight='fastsim_model_e')
+
+        length_points = self.nodes.loc[shortest_path_length]
+        simple_e_points = self.nodes.loc[shortest_path_simple_e]
+        fastsim_points = self.nodes.loc[shortest_path_fastsim]
+
+        length_path = path = gpd.GeoDataFrame(
+            [LineString(length_points.geometry.values)], columns=['geometry'])
+        length_layer = GeoData(geo_dataframe=length_path, style={
+            'color': 'green', 'weight': 4})
+        path.to_csv('shortestRoute.csv', index=False)  ## Added
+        self.m.add_layer(length_layer)
+        self.path_layer_list.append(length_layer)
+
+        simple_e_path = path = gpd.GeoDataFrame(
+            [LineString(simple_e_points.geometry.values)], columns=['geometry'])
+        simple_e_layer = GeoData(geo_dataframe=simple_e_path, style={
+            'color': 'blue', 'weight': 3})
+        path.to_csv("simpleRoute.csv", index=False)  ## Added
+        self.m.add_layer(simple_e_layer)
+        self.path_layer_list.append(simple_e_layer)
+
+        fastsim_path = gpd.GeoDataFrame(
+            [LineString(fastsim_points.geometry.values)], columns=['geometry'])
+        fastsim_layer = GeoData(geo_dataframe=fastsim_path, style={
+            'color': 'red', 'weight': 2})
+        path.to_csv('fastSimRoute.csv', index=False)  ## Added
+        self.m.add_layer(fastsim_layer)
+        self.path_layer_list.append(fastsim_layer)
+
+    def set_nearest_node(self, marker):
+        marker.nearest_node = ox.distance.nearest_nodes(
+            self.graph, marker.location[0], marker.location[1])
+        return
+
+    def activate_energy_model(self):
+        if isinstance(self.vehicle, ev_energy_model):
+            self.__activate_simple_energy_model()
+        elif isinstance(self.vehicle, fastsim_energy_model):
+            self.__activate_fastsim_energy_model()
+
+    def activate_both_models(self):
+        self.vehicle = fastsim_energy_model(
+            self.config.fastsim_vehicle_csv_path, self.config.fastsim_vehicle_csv_index)
+        self.__activate_fastsim_energy_model()
+        self.vehicle = ev_energy_model(
+            self.config.vehicle_config['mass'], self.config.vehicle_config['air_resistance'],
+            self.config.vehicle_config['area'])
+        self.__activate_simple_energy_model()
+        print("Loaded both energy estimates")
+        self.compare_mode = True
+
+    def __activate_fastsim_energy_model(self):
+        # get a dataframe version of the graph to modify
+        graphDF = self.get_dataframe_from_graph()
+
+        # placeholder list for new column on the graph
+        energy_consumed = []
+
+        # For each row, grab the required value, compute the energy, and add to the energy list
+        for index, row in graphDF[1].iterrows():
+            speed_mps = row['speed_kph'] / 3.6
+            grade = row['grade']
+            length = row['length']
+            energy_consumption = self.vehicle.get_consumed_kwh_fastsim(
+                speed_mps, grade, length)
+            energy_consumed.append(energy_consumption)
+
+        # create a new column on the graphDF
+        graphDF[1]['fastsim_model_e'] = energy_consumed
+
+        # convert df back into graph and assign modified graph to self.graph
+        self.graph = ox.graph_from_gdfs(graphDF[0], graphDF[1])
+
+        # update the node, edges objects
+        self.nodes, self.edges = ox.graph_to_gdfs(self.graph)
+
+        # update the map mode to do shortest path based on the simple energy model
+        self.edge_weight = 'fastsim_model_e'
+
+    def __activate_simple_energy_model(self):
+        # get a dataframe version of the graph to modify
+        graphDF = self.get_dataframe_from_graph()
+
+        # placeholder list for new column on the graph
+        energy_consumed = []
+
+        # get the starting wind and wind bearing for the energy consumption model
+        current_weather = get_weather_data(
+            self.starting_coord[0], self.starting_coord[1], self.weather_key)
+
+        # For each row, grab the required value, compute the energy, and add to the energy list
+        for index, row in graphDF[1].iterrows():
+            speed = row['speed_kph']
+            bearing = row['bearing']
+            grade = row['grade']
+            length = row['length']
+            wind_speed = current_weather['wind_speed']
+            wind_heading = current_weather['wind_heading']
+            energy_consumption = self.vehicle.energy_consumption(
+                grade, speed / 3.6, 0, wind_speed, car_heading=bearing, wind_h=wind_heading, length=length)
+            energy_consumed.append(energy_consumption)
+
+        # create a new column on the graphDF
+        graphDF[1]['simple_model_e'] = energy_consumed
+
+        # convert df back into graph and assign modified graph to self.graph
+        self.graph = ox.graph_from_gdfs(graphDF[0], graphDF[1])
+
+        # update the node, edges objects
+        self.nodes, self.edges = ox.graph_to_gdfs(self.graph)
+
+        # update the map mode to do shortest path based on the simple energy model
+        self.edge_weight = 'simple_model_e'
+
+    def get_last_path_nodes(self):
+        return self.last_shortest_path_nodes
+
+    def get_last_path_rel_edges(self):
+        return self.last_shortest_path_related_edges
+
+    def set_starting_coord(self, lat, lon):
+        if self.from_marker is not None and self.from_marker in self.m.layers:
+            self.m.remove_layer(self.from_marker)
+        self.from_marker = Marker(location=(lat, lon))
+        # self.m.add_layer(self.from_marker)  # Comment this out if you don't want to display the marker on the map
+
+    def set_ending_coord(self, lon, lat):
+        if self.to_marker is not None and self.to_marker in self.m.layers:
+            self.m.remove_layer(self.to_marker)
+        self.to_marker = Marker(location=(lat, lon))
+        # self.m.add_layer(self.to_marker)  # Comment this out if you don't want to display the marker on the map
+
