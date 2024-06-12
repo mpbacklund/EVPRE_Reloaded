@@ -83,7 +83,7 @@ const DnDFlow = () => {
 
   const { nodeValues, setImageURL } = useNodeStore((state) => ({
     nodeValues: state.nodes,
-    setImageURL: state.imageURL,
+    setImageURL: state.setImageURL,
   }));
 
   const { data, loading, error, refetch} = useFetch();
@@ -147,6 +147,13 @@ const DnDFlow = () => {
 
   const handleKeyDown = useCallback(
     (event) => {
+      const activeElementTag = document.activeElement.tagName;
+  
+      // Check if the active element is an input, textarea or contenteditable element
+      if (activeElementTag === 'INPUT' || activeElementTag === 'TEXTAREA' || document.activeElement.isContentEditable) {
+        return;
+      }
+  
       if (event.key === 'Delete' || event.key === 'Backspace') {
         const selectedNodes = reactFlowInstance.getNodes().filter(node => node.selected);
         if (selectedNodes.length > 0) {
@@ -157,6 +164,7 @@ const DnDFlow = () => {
     },
     [reactFlowInstance, onNodesDelete, setNodes]
   );
+  
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -206,6 +214,8 @@ const DnDFlow = () => {
         console.log(params)
 
         const route = await axios.get('http://localhost:8000/getRoute', {params: params});
+        console.log(route.data)
+        setImageURL(route.data)
       } catch (error) {
         console.error('Error fetching image:', error);
       }

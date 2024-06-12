@@ -1,9 +1,9 @@
-import React, {memo, useEffect, useState, useContext} from 'react';
-import {Handle, Position} from 'reactflow';
-import { useNodeStore } from '../store'
+import React from 'react';
+import { Handle, Position } from 'reactflow';
+import { useNodeStore } from '../store';
 
 function RouteNode() {
-  const {imageURL} = useNodeStore((state) => state.imageURL);
+  const imageURL = useNodeStore((state) => state.imageURL);
 
   return (
     <div>
@@ -12,7 +12,14 @@ function RouteNode() {
         position={Position.Top}
       />
       <div>
-        {imageURL ? <img src={imageURL} title="Map"></img> : <div><p className='upper_textbox'>Route</p><label className='small_text'>Map will appear here</label></div>}
+        <p className='upper_textbox'>Route</p>
+        {imageURL ? (
+          <img src={imageURL} alt="Map" />
+        ) : (
+          <div>
+            <label className='small_text'>Map will appear here</label>
+          </div>
+        )}
       </div>
     </div>
   );

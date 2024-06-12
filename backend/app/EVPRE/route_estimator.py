@@ -4,11 +4,11 @@ import geopandas as gpd
 import numpy as np
 from ipyleaflet import *
 from shapely.geometry import LineString, mapping
-from simple_energy_model import ev_energy_model
-from vehicles import getVehicleInfo
-from weather import get_weather_data
 from dotenv import load_dotenv
 import os
+from .vehicles import getVehicleInfo
+from .weather import get_weather_data
+from .simple_energy_model import ev_energy_model
 
 
 # In order to Set The Lat/Long for both markers there are two functions
@@ -21,7 +21,6 @@ class RouteEstimator:
     def __init__(self, startCoord, endCoord, vehicle, graph=None):
         self.starting_coord = startCoord
         self.ending_coord = endCoord
-
 
         load_dotenv()
         self.weather_key = os.getenv("WEATHER_KEY")
@@ -112,22 +111,9 @@ class RouteEstimator:
 
             shortest_path_points = self.nodes.loc[shortest_path]
 
-            # this does not work. We cannot be writing user files to the backend. 
-            path = gpd.GeoDataFrame(
-                [LineString(shortest_path_points.geometry.values)], columns=['geometry'])
-            path.to_csv('route.csv', index=False)
-            # path.to_file('route.geojson', driver='GeoJSON')
-
-
-            # Save Route Data to file #   May still be useful so I keep
-            # file = open('routeCSV.csv', "w")
-            # for i in range(shortest_path_points.geometry.values.size):
-            # print(shortest_path_points.geometry.values[i], file = file)
-            # file.close()
-
-            # self.m.add_layer(path_layer)
-            # self.routeLayer = path_layer
-            # self.path_layer_list.append(path_layer)
+            path = gpd.GeoDataFrame([LineString(shortest_path_points.geometry.values)], columns=['geometry'])
+            
+            return path
 
     #####################################################################################################
 
