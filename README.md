@@ -13,7 +13,7 @@ TRAFFIC_KEY=(your TomTom traffic api key)
 SECRET_KEY=(whatever you want your secret key for the django backend to be)
 ```
 
-* In the terminal, navigate to the root directory of the project (where the file `docker-compose.yml` is located. Then run the command `docker-compose build`
+* In the terminal, navigate to the root directory of the project (where the file `docker-compose.yml` is located). Then run the command `docker-compose build`
 
 ### Running the Project
 * If you haven't already, navigate to the root directory of the project in the terminal. Then run the command `docker-compose up`
