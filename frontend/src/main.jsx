@@ -7,6 +7,7 @@ import {
 } from "react-router-dom"
 import 'bootstrap/dist/css/bootstrap.min.css'
 import "./style.css"
+import 'leaflet/dist/leaflet.css'
 
 import Home from "./pages/Home.jsx"
 import About from "./pages/About.jsx"

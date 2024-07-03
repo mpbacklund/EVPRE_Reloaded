@@ -1,14 +1,20 @@
 # EVPRE_Reloaded
 
 ### Dependencies
-* Make sure you have Node.js installed on your machine
-* Many more that have not been tested
+* Make sure you have Node.js and Docker installed on your machine before attempting to run this project
+
 ### Building the Project
-* ToDo: This
+* Navigate to the `backend` folder. Add a file called .env to this folder. This file should look like this:
+```
+GOOGLE_MAPS_KEY=(your google maps key)
+WEATHER_KEY=(your openweather api key)
+TRAFFIC_KEY=(your TomTom traffic api key)
+
+SECRET_KEY=(whatever you want your secret key for the django backend to be)
+```
+
+* In the terminal, navigate to the root directory of the project (where the file `docker-compose.yml` is located. Then run the command `docker-compose build`
 
 ### Running the Project
-* Navigate to the directory `backend` in your terminal
-* Run the command `python manage.py runserver`
-* Navigate to the directory `frontend` in your terminal
-* Run the command `npm run dev`
-* Navigate to the site `localhost:3000` in your browser
+* If you haven't already, navigate to the root directory of the project in the terminal. Then run the command `docker-compose up`
+* If you have any problems getting the backend to run, you may need to manually run `python manage.py migrate` from the `backend` directory

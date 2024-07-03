@@ -74,7 +74,7 @@ const NavBar = () => {
   }
 
   return (
-    <Navbar bg="dark" data-bs-theme="dark" fixed="top" expand="lg" expanded={expanded} onToggle={(expanded) => setExpanded(expanded)} className="bg-body-tertiary">
+    <Navbar bg="dark" data-bs-theme="dark" fixed="top" expand="lg" expanded={expanded} onToggle={(expanded) => setExpanded(expanded)}>
       <Container>
         <Navbar.Brand onClick={navigateHome}>{isLoggedIn && data?.username || "anonymous"}</Navbar.Brand>
         <Navbar.Toggle aria-controls="basic-navbar-nav" />

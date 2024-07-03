@@ -1,6 +1,7 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 
+from django.http import HttpResponse
 from .serializers import UserSerializer
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -11,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 
 import os
 from dotenv import load_dotenv
+import requests
 
 from .EVPRE.route_estimator import RouteEstimator
 
@@ -55,47 +57,67 @@ def logout(request):
 
 @api_view(['GET'])
 def getRoute(request):
-    startLat = float(request.GET['startLat'])
-    startLon = float(request.GET['startLon'])
-    endLat = float(request.GET['endLat'])
-    endLon = float(request.GET['endLon'])
-    vehicle = request.GET['vehicle']
+    try:
+        startLat = float(request.GET['startLat'])
+        startLon = float(request.GET['startLon'])
+        endLat = float(request.GET['endLat'])
+        endLon = float(request.GET['endLon'])
+        vehicle = request.GET['vehicle']
 
-    startCoord = (startLat, startLon)
-    endCoord = (endLat, endLon)
+        startCoord = (startLat, startLon)
+        endCoord = (endLat, endLon)
 
-    print(startCoord)
-    print(endCoord)
+        route_estimator_fastsim_model = RouteEstimator(startCoord, endCoord, vehicle)
+        route_estimator_fastsim_model.activate_energy_model()
+        path_gdf = route_estimator_fastsim_model.get_shortest_path()
 
-    route_estimator_length = RouteEstimator(startCoord, endCoord, vehicle)
-    route_map = route_estimator_length.create_map()
+        route = convert_to_static_url(path_gdf)
+        return Response(route, status=status.HTTP_200_OK)
 
-    route_estimator_fastsim_model = RouteEstimator(startCoord, endCoord, vehicle, graph=route_estimator_length.get_graph())
-    route_estimator_fastsim_model.activate_energy_model()
+    except KeyError as e:
+        return Response({"error": f"Missing parameter: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    route_estimator_fastsim_model.set_starting_coord(startLat, startLon)
-    route_estimator_fastsim_model.set_ending_coord(endLat, endLon)
-
-    path_gdf = route_estimator_fastsim_model.handle_change_location(route_estimator_fastsim_model.from_marker.location, route_estimator_fastsim_model.to_marker.location)
-
+def convert_to_static_url(path_gdf):
     # Convert GeoDataFrame to WKT
     line_wkt = path_gdf.geometry.iloc[0].wkt
 
     # Parse WKT to get coordinates
     parsed = line_wkt.strip('LINESTRING (').strip(')').split(',')
     route = []
-    for i in range(len(parsed)):
-        item = parsed[i].strip().split(" ")
-        pair = f"{item[1]},{item[0]}"
+    for item in parsed:
+        coords = item.strip().split()
+        pair = [float(coords[1]), float(coords[0])]
         route.append(pair)
-    path = "%7C".join(route)
+    
+    return route
 
-    url = "https://maps.googleapis.com/maps/api/staticmap?"
-    size = "500x400"
+def convert_to_dynamic_url(path_gdf):
+    # Function to generate Google Maps URL for navigation
+    line_wkt = path_gdf.geometry.iloc[0].wkt
+    parsed = line_wkt.strip('LINESTRING (').strip(')').split(',')
+    route = []
+    for item in parsed:
+        coords = item.strip().split(" ")
+        pair = f"{coords[1]},{coords[0]}"
+        route.append(pair)
+
     start = route[0]
     end = route[-1]
-    load_dotenv()
-    maps_api = os.getenv("GOOGLE_MAPS_KEY")
-    url += f"path={path}&markers={start}%7C{end}&size={size}&key={maps_api}"
 
-    return Response(url, status=status.HTTP_200_OK)
+    # Generate waypoints for intermediate stops if necessary
+    waypoints = "|".join(route[1:-1]) if len(route) > 2 else ""
+
+    # Load Google Maps API key from environment variable
+    load_dotenv()
+    google_maps_api_key = os.getenv("GOOGLE_MAPS_KEY")
+
+    # Constructing the Google Maps URL
+    google_maps_url = f"https://www.google.com/maps/dir/?api=1"
+    google_maps_url += f"&origin={start}&destination={end}"
+    google_maps_url += f"&waypoints={waypoints}"
+    google_maps_url += f"&travelmode=driving"
+    google_maps_url += f"&key={google_maps_api_key}"
+
+    return google_maps_url
