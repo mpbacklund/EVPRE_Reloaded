@@ -18,3 +18,6 @@ SECRET_KEY=(whatever you want your secret key for the django backend to be)
 ### Running the Project
 * If you haven't already, navigate to the root directory of the project in the terminal. Then run the command `docker-compose up`
 * If you have any problems getting the backend to run, you may need to manually run `python manage.py migrate` from the `backend` directory
+
+### Notes
+* This build uses vite on the frontend and "manage.py runserver" for the backend. It is configured in such a way that live updates will be rendered and uploaded immediately to the docker container. The only time you should have to use `docker-compose build` is when a new dependency is added to the project
