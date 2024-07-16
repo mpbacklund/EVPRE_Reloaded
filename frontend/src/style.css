@@ -80,3 +80,23 @@ html, body, #root {
 .ml-auto {
   margin-left: auto;
 }
+
+.custom-select {
+  flex: 1;
+}
+
+/* Ensure that items are horizontally aligned on larger screens and stacked vertically on smaller screens */
+.custom-row {
+    text-align: center; /* Center text for all screens */
+}
+
+.item {
+    flex: 1; /* Allow items to flex and take available space */
+}
+
+/* Center align items only when they are stacked vertically */
+@media (max-width: 768px) {
+    .custom-row {
+        justify-content: center;
+    }
+}

@@ -13,4 +13,8 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-RUN python manage.py migrate
+# Redirect to entrypoint.sh to run migrations each time the container is run
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

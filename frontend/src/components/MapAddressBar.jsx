@@ -2,18 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Form, Card, Button, Row, Col } from 'react-bootstrap';
 import axios from 'axios';
 
-import * as yup from 'yup';
-import * as formik from 'formik';
-
 const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, locationClicked }) => {
-    const [startAddress, setStartAddress] = useState("Your location");
+    const [startAddress, setStartAddress] = useState("Your location"); 
+    const [startIsValid, setStartIsValid] = useState(true);
     const [endAddress, setEndAddress] = useState('');
+    const [endIsValid, setEndIsValid] = useState(true);
     const [fetchingRoute, setFetchingRoute] = useState(false);
     const [vehicle, setVehicle] = useState('');
+    const [vehicleIsValid, setVehicleIsValid] = useState(true);
 
-    const startTextBoxRef = useRef(null);
-    const endTextBoxRef = useRef(null);
+    const startTextBoxRef = useRef(null); // reference to start text box element
+    const endTextBoxRef = useRef(null); // reference to end text box element
 
+    // vehicle dropdown options
     const options = {
         "Ford Focus": "FORDFOCUSELECTRIC2012",
         "Cheverolet Spark": "CHEVSPARK2016",
@@ -24,6 +25,8 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
     // update end Location on address bar when new location is clicked on map
     useEffect(() => {
         if (endCoords) {
+            setEndIsValid(true);
+
             getAddress(endCoords.lat, endCoords.lng)
                 .then(address => {
                     setEndAddress(address);
@@ -34,18 +37,19 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
         }
     }, [endCoords]);
 
+    // if a user clicks on the location icon, start address is returned to their location
     useEffect(() => {
         setStartAddress("Your location");
     }, [locationClicked]);
 
-    // When we click on the start location textbox, delete its contents if it is the default location
+    // When the start location textbox is clicked, delete its contents if it is the default location
     const handleStartFocus = () => {
         if (startAddress === "Your location") {
             setStartAddress(''); // Clear start Address when input is focused
         }
     };
 
-    // When we click off of the start location textbox, restore the value to the default if it is blank
+    // When the start location textbox is clicked off of or submitted, restore the value to the default if it is blank
     const handleStartBlur = () => {
         if (startAddress === "") {
             setStartAddress('Your location');
@@ -56,32 +60,37 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
         }
     }
 
-    // When we click on the end location textbox, delete its contents if it is the default location
+    // Don't show input error when we are clicked on the end textbox
     const handleEndFocus = () => {
-        if (endAddress === "") {
-            setEndAddress(''); // Clear end value when input is focused
-        }
+        setEndIsValid(true);
     };
 
     // When we click off of the end location textbox, restore the value to the current pin location if it is blank
     const handleEndBlur = () => {
-        if (endAddress === "") {
+        if (endAddress === "" && endCoords) {
             getAddress(endCoords.lat, endCoords.lng)
                 .then(address => {
                     setEndAddress(address);
+                    setEndIsValid(true);
                 })
                 .catch(error => {
                     console.error('Error fetching address:', error);
+                    setEndIsValid(false);
                 });
         }
-        else {
+        else if (endAddress !=="") {
             getCoords(endAddress)
                 .then(coords => {
                     onNewEnd(coords);
+                    setEndIsValid(true);
                 })
                 .catch(error => {
                     console.error("error fetching coordinates", error);
+                    setEndIsValid(false);
                 });
+        }
+        else {
+            setEndIsValid(false);
         }
     }
 
@@ -90,6 +99,7 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
         setStartAddress(e.target.value);
     };
 
+    // blurs or clicks off of start text box when enter is pressed
     const handleStartTextEnter = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault(); // Prevents the default action (e.g., form submission if inside a form)
@@ -99,7 +109,7 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
         }
     }
 
-    // handles when 
+    // blurs or clicks off of end text box when enter is pressed
     const handleEndTextEnter = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault(); // Prevents the default action (e.g., form submission if inside a form)
@@ -116,21 +126,45 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
 
     // When Submit button is pressed
     const handleSubmit = async () => {
-        setFetchingRoute(true);
+        if (validateForm()) {
+            setFetchingRoute(true);
 
-        const params = {
-            'startLat': startCoords.lat,
-            'startLon': startCoords.lng,
-            'endLat': endCoords.lat,
-            'endLon': endCoords.lng,
-            'vehicle': vehicle
-        };
-
-        const response = await axios.get('http://localhost:8000/getRoute', { params });
-        onRoute(response)
-
-        setFetchingRoute(false);
+            const params = {
+                'startLat': startCoords.lat,
+                'startLon': startCoords.lng,
+                'endLat': endCoords.lat,
+                'endLon': endCoords.lng,
+                'vehicle': vehicle
+            };
+    
+            const response = await axios.get('http://localhost:8000/getRoute', { params });
+            onRoute(response)
+    
+            setFetchingRoute(false);
+        }
     };
+
+    const validateForm = () => {
+        let isValid = true;
+    
+        if (!endCoords) { 
+            setEndIsValid(false);
+            isValid = false;
+        } 
+    
+        if (!vehicle) { 
+            setVehicleIsValid(false);
+            isValid = false;
+        } 
+
+        if (!startCoords) {
+            setStartIsValid(false);
+            isValid = false;
+        }
+    
+        return isValid;
+    };
+    
 
     // gets coordinates from startMarker and sends a request to the map to add a marker in that location
     const addStartMarker = () => {
@@ -175,10 +209,14 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
 
     // changes vehicle selection based on dropdown selection
     const handleVehicleChange = (e) => {
-        setVehicle(e.target.value);
+        if(e.target.value) {
+            setVehicle(e.target.value);
+            setVehicleIsValid(true);
+        }
     };
 
     return (
+        
         <div className='address-bar-overlay'>
             <Card>
                 <Form>
@@ -206,13 +244,19 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
                             onFocus={handleEndFocus}
                             onBlur={handleEndBlur}
                             placeholder="End Location"
+                            isInvalid={!endIsValid}
                             ref={endTextBoxRef}
                         />
                     </Form.Group>
                     <Form.Group>
-                        <Row className='align-items-center'>
-                            <Col xs='auto'>
-                                <Form.Select value={vehicle} onChange={handleVehicleChange}>
+                        <Row className="g-0 justify-content-between align-items-center custom-row">
+                            <Col xs='auto' className="mb-2 mb-md-0">
+                                <Form.Select 
+                                    value={vehicle} 
+                                    onChange={handleVehicleChange}
+                                    isInvalid={!vehicleIsValid}
+                                    className={`custom-select`}
+                                >
                                     <option value="">Select a vehicle</option>
                                     {Object.keys(options).map((key) => (
                                         <option key={key} value={options[key]}>
@@ -226,6 +270,7 @@ const AddressBar = ({ startCoords, endCoords, onRoute, onNewStart, onNewEnd, loc
                                     variant="primary" 
                                     onClick={handleSubmit} 
                                     disabled={fetchingRoute}
+                                    className='custom-button'
                                 > 
                                     {fetchingRoute ? <div className='spinner'></div> : "Get Directions"} 
                                 </Button>
